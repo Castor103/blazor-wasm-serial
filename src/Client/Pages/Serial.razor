@@ -1,0 +1,326 @@
+﻿@page "/serial"
+
+@using System;
+@using System.Diagnostics;
+@using System.IO.Ports;
+@using System.Threading;
+@using FluentSample.Infra;
+
+@inject IJSRuntime JSRuntime
+@inject ISerialPort SerialP
+
+<style>
+	#box{ margin: 3px; padding: 2px 2px; }
+</style>
+
+<PageTitle>Serial</PageTitle>
+
+<h1>Serial</h1>
+
+<FluentStack Orientation="Orientation.Vertical"
+                HorizontalAlignment="@Horizontal"
+                VerticalAlignment="@Vertical">
+    <div>
+		<div id="box">
+            <h4>Serial Baudrate</h4>
+            <FluentSelect ReadOnly="true" ValueChanged="@(e => selectedBaudrateValue = e)" TOption="string">
+                <FluentOption Value="115200">115200</FluentOption>
+                <FluentOption Value="19200">19200</FluentOption>
+                <FluentOption Value="9600">9600</FluentOption>
+                <FluentOption Value="4800">4800</FluentOption>
+            </FluentSelect>
+        </div>
+	</div>
+    <div>
+		<div id="box">
+            <FluentButton Appearance="Appearance.Accent" @onclick="DoOpen">Open</FluentButton>
+            <!-- <FluentButton Appearance="Appearance.Accent" @onclick="DoClose">Close</FluentButton> -->
+            <FluentButton Appearance="Appearance.Accent" @onclick="DoCloseForce">Close</FluentButton>
+            @* <FluentButton Appearance="Appearance.Accent" @onclick="DoTest01">Test01</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="DoTest02">Test02</FluentButton> *@
+        </div>
+	</div>
+    <div style="width: 70%">
+		<div id="box" style="width: 100%">
+            <h4>Message TxRx History</h4>
+            <FluentTextArea @bind-Value=dataHistory Rows="12" ReadOnly="true" style="width: 100%"></FluentTextArea>
+        </div>
+	</div>
+    <div style="width: 80%">
+		<div id="box" style="width: 100%">
+            <h4>SendMessage</h4>
+            <FluentStack Orientation="Orientation.Horizontal"
+                        HorizontalAlignment="@Horizontal"
+                        VerticalAlignment="@Vertical"
+                        HorizontalGap="4"
+                        Style="border: 0px dotted var(--accent-fill-rest)">
+                <div style="width: 80%">
+                    <FluentTextField @bind-Value=@dataForSend @onkeyup="@DoKeyup" style="width: 100%"></FluentTextField>
+                </div>
+                <div style="width: 300px">
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoSend">Send</FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoClear">Clear</FluentButton>
+                </div>
+            </FluentStack>
+        </div>
+	</div>
+</FluentStack>
+
+@code {
+    HorizontalAlignment Horizontal = HorizontalAlignment.Left;
+    VerticalAlignment Vertical = VerticalAlignment.Top;
+
+    private int Count { get; set; } = 100;
+    private string selectedBaudrateValue = "115200";
+    private Timer? _updateTimer = null;
+    public string ScaleValue { get; set; } = "0.000";   
+    private string? dataForSend, dataHistory; 
+
+    // for JSInvokable Function
+    private DotNetObjectReference<Serial>? objectReference;
+    private static Func<string, Task>? ChangeParaContentActionAsync;
+
+    private async Task LocalChangeParaContentValueAsync(string value)
+    {
+        await CallbackListen(value);
+    }
+
+    #region Lifecycle Method, Interface Method 
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        ChangeParaContentActionAsync = LocalChangeParaContentValueAsync;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        //ScaleValue = await _readSerialPortService.GetSerialValue();
+        _updateTimer = new Timer(state => { InvokeAsync(GetValue); }, null, 0, 100);
+
+        await Task.Delay(1);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(firstRender)
+        {
+            // https://www.learnblazor.com/javascript-interop-csharp-from-javascript
+            //stringHelpersRef = DotNetObjectReference.Create(new StringHelpers(input));
+
+            // https://stackoverflow.com/questions/75190456/jsinvokable-blazor-method-not-being-called
+            objectReference = DotNetObjectReference.Create(this);
+        }
+
+        await Task.Delay(1);
+    }
+
+    public void Dispose()
+    {
+        ChangeParaContentActionAsync = null;
+        _updateTimer?.Dispose();
+        objectReference?.Dispose();
+
+    }
+
+    #endregion
+
+    #region Method
+
+    #region Method From UI Event
+
+    public async Task DoOpen()
+    {
+        try
+        {
+            var requestPortReponse = await SerialP.RequestPort();
+
+            if (requestPortReponse == FluentSample.Infra.Enums.RequestPortResponseEnum.Ok)
+            {
+                Console.WriteLine($"RequestPort ok");
+
+                int getBaudrate = GetSelectBaudrate();
+
+                if(getBaudrate != -1)
+                {
+                    var openResponse = await SerialP.Open(getBaudrate);
+
+                    if(openResponse == FluentSample.Infra.Enums.ConnectResponseEnum.Ok)
+                    {
+                        Console.WriteLine($"DoOpen ok");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"DoOpen ng - [{openResponse.ToString()}]");
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine($"RequestPort ng - [{requestPortReponse.ToString()}]");
+            }
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+       
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoSend()
+    {
+        if(!string.IsNullOrEmpty(dataForSend))
+        {
+            await SendMessage((string)dataForSend);
+        }
+    }
+
+    public async Task DoClear()
+    {
+        dataForSend = string.Empty;
+        
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoClose()
+    {
+        await SerialP.Close();
+    }
+
+    public async Task DoCloseForce()
+    {
+         await SerialP.CloseForce();
+    }
+
+    public async void DoKeyup(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args)
+    {
+        //Console.WriteLine($"Key Pressed is " + args.Key);
+        //await InvokeAsync(() => StateHasChanged());
+
+        if (args.Key == "Enter")
+        {
+            await DoSend();
+        }
+
+        await Task.Delay(1);
+    }
+
+    #endregion
+
+    #region Internal Method
+
+    public int GetSelectBaudrate()
+    {
+        int result = -1;
+
+        try
+        {
+            if(int.TryParse(selectedBaudrateValue, out result))
+            {
+               //
+            }
+            else
+            {
+                Console.WriteLine($"selectedBaudrateValue Fail TryParse [{selectedBaudrateValue}]");
+            }
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+        
+        return result;
+    }
+
+    public async Task SendMessage(string message)
+    {
+        //if(SerialP.IsConnected)
+        {
+            await SerialP.Write(message);
+            await CallbackListen(message);
+        }
+    }
+
+    public async Task CallbackListen(object data)
+    {
+        try
+        {
+            string curruntTimestamp = (DateTime.Now).ToString("HH:mm:ss.fff");
+            dataHistory += $"[{curruntTimestamp}] {data}" + Environment.NewLine;
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task GetValue()
+    {
+        //ScaleValue = await _readSerialPortService.GetSerialValue();
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    #endregion
+
+    #endregion
+
+    #region JSInvokable Method
+
+    [JSInvokable]
+    public static void UpdateMessage(string msg)
+    {
+        try
+        {
+            if (ChangeParaContentActionAsync is {} actionAsync)
+            {
+                //await actionAsync(msg);
+                actionAsync(msg);
+            }
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+    }
+
+    #endregion
+
+    #region TestFunction
+
+    public async Task DoTest01()
+    {
+        try
+        {
+            Console.WriteLine($"DoTest01");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+       
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoTest02()
+    {
+        try
+        {
+            Console.WriteLine($"DoTest02");
+            
+            await JSRuntime.InvokeVoidAsync("sayHello1");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+       
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    #endregion
+
+}

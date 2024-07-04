@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluentSample.Client", "src\Client\FluentSample.Client.csproj", "{24415815-4E95-4C36-962D-63BEAD0D30A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluentSample.Infra", "src\Infra\FluentSample.Infra.csproj", "{4D0B8D70-05B3-4766-BE08-C0F6C7FE5BA6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{24415815-4E95-4C36-962D-63BEAD0D30A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24415815-4E95-4C36-962D-63BEAD0D30A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24415815-4E95-4C36-962D-63BEAD0D30A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24415815-4E95-4C36-962D-63BEAD0D30A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4D0B8D70-05B3-4766-BE08-C0F6C7FE5BA6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4D0B8D70-05B3-4766-BE08-C0F6C7FE5BA6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4D0B8D70-05B3-4766-BE08-C0F6C7FE5BA6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4D0B8D70-05B3-4766-BE08-C0F6C7FE5BA6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
