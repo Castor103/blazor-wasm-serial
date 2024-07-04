@@ -2,11 +2,20 @@
 
 Fluent + JS Serial + Chrome
 
+dotnet 8.0.301
 
+### 1. Build and Run
 
+```bash
+    # build
+    {project_root_directory} $ dotnet build
 
+    # change directory
+    {project_root_directory} $ d ./src/Client
 
-
+    # execute
+    {project_root_directory}/src/Client  $ dotnet run
+```
 
 ### Append
 
