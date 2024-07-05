@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Shared\FluentSample.Shared.csproj" />
     <ProjectReference Include="..\Infra\FluentSample.Infra.csproj" />
   </ItemGroup>
 

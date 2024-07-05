@@ -104,9 +104,12 @@ async function startListen() {
                 if(value) {
                     try
                     {
-                        var result = String.fromCharCode.apply(null, value);
+                        //var result = String.fromCharCode.apply(null, value);
                         //console.log(":" + result);
-                        DotNet.invokeMethodAsync('FluentSample.Client', 'UpdateMessage', result);
+                        //DotNet.invokeMethodAsync('FluentSample.Client', 'UpdateMessageBytes', result);
+
+                        DotNet.invokeMethodAsync('FluentSample.Client', 'UpdateMessageBytes', value);
+
                     } catch (error) {
                         // TODO: Handle non-fatal read error.
                         console.log("startListenException: " + error);

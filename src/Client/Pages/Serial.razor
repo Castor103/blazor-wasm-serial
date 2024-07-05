@@ -1,16 +1,21 @@
 ﻿@page "/serial"
 
 @using System;
+@using System.Text;
 @using System.Diagnostics;
 @using System.IO.Ports;
 @using System.Threading;
 @using FluentSample.Infra;
+@using FluentSample.Shared.Logic;
 
 @inject IJSRuntime JSRuntime
 @inject ISerialPort SerialP
 
 <style>
 	#box{ margin: 3px; padding: 2px 2px; }
+    .sub-title{
+        height: 1px;
+    }
 </style>
 
 <PageTitle>Serial</PageTitle>
@@ -22,33 +27,74 @@
                 VerticalAlignment="@Vertical">
     <div>
 		<div id="box">
-            <h4>Serial Baudrate</h4>
-            <FluentSelect ReadOnly="true" ValueChanged="@(e => selectedBaudrateValue = e)" TOption="string">
-                <FluentOption Value="115200">115200</FluentOption>
-                <FluentOption Value="19200">19200</FluentOption>
-                <FluentOption Value="9600">9600</FluentOption>
-                <FluentOption Value="4800">4800</FluentOption>
-            </FluentSelect>
-        </div>
-	</div>
-    <div>
-		<div id="box">
-            <FluentButton Appearance="Appearance.Accent" @onclick="DoOpen">Open</FluentButton>
-            <!-- <FluentButton Appearance="Appearance.Accent" @onclick="DoClose">Close</FluentButton> -->
-            <FluentButton Appearance="Appearance.Accent" @onclick="DoCloseForce">Close</FluentButton>
-            @* <FluentButton Appearance="Appearance.Accent" @onclick="DoTest01">Test01</FluentButton>
-            <FluentButton Appearance="Appearance.Accent" @onclick="DoTest02">Test02</FluentButton> *@
+            <FluentStack Orientation="Orientation.Vertical"
+                        HorizontalAlignment="@Horizontal"
+                        VerticalAlignment="@Vertical"
+                        Style="border: 0px dotted var(--accent-fill-rest)">
+
+                <h6  class="sub-title">Serial Control</h6>
+                <FluentStack Orientation="Orientation.Horizontal"
+                    HorizontalAlignment="@Horizontal"
+                    VerticalAlignment="@Vertical">
+                    <FluentSelect ReadOnly="true" ValueChanged="@(e => selectedBaudrateValue = e)" TOption="string">
+                        <FluentOption Value="115200">115200</FluentOption>
+                        <FluentOption Value="19200">19200</FluentOption>
+                        <FluentOption Value="9600">9600</FluentOption>
+                        <FluentOption Value="4800">4800</FluentOption>
+                    </FluentSelect>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoOpen">Open</FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoCloseForce">Close</FluentButton>
+                </FluentStack>
+
+                <h6 class="sub-title">Logic Control</h6>
+                <FluentStack Orientation="Orientation.Horizontal"
+                    HorizontalAlignment="@Horizontal"
+                    VerticalAlignment="@Vertical">
+                    <FluentSelect Disabled="@unabledSelectCompLogicModule" ReadOnly="true" ValueChanged="@(e => selectedLogicModule = e)" TOption="string">
+                        <FluentOption Value="0">Thermometer</FluentOption>
+                        <FluentOption Value="1">Thrust</FluentOption>
+                    </FluentSelect>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoStartLogic">Logic Start</FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoStopLogic">Logic Stop</FluentButton>
+                </FluentStack>
+                <h6 class="sub-title">View Control</h6>
+                <FluentStack Orientation="Orientation.Horizontal"
+                    HorizontalAlignment="@Horizontal"
+                    VerticalAlignment="@Vertical">
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoHistoryClear">History Clear</FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="DoScrollBottom">Focus Scroll Bottom</FluentButton>
+                </FluentStack>
+            </FluentStack>
         </div>
 	</div>
     <div style="width: 70%">
 		<div id="box" style="width: 100%">
-            <h4>Message TxRx History</h4>
-            <FluentTextArea @bind-Value=dataHistory Rows="12" ReadOnly="true" style="width: 100%"></FluentTextArea>
+            <FluentStack Orientation="Orientation.Horizontal"
+                HorizontalAlignment="@Horizontal"
+                VerticalAlignment="@Vertical"
+                Style="border: 0px dotted var(--accent-fill-rest)">
+                <h5>Message TxRx History</h5>
+                <FluentSwitch @bind-Value=@IsDisplayStrOrHex Label="Display String or Hex">
+                    <span slot="unchecked-message">String</span>
+                    <span slot="checked-message">Hex</span>
+                </FluentSwitch>
+            </FluentStack>
+            <FluentTextArea @ref="_refDataHistory" id="textarea_id" @bind-Value=dataHistory Rows="12" ReadOnly="true" style="width: 100%; font-family: Consolas,monaco,monospace;"></FluentTextArea>
         </div>
 	</div>
     <div style="width: 80%">
 		<div id="box" style="width: 100%">
-            <h4>SendMessage</h4>
+            <FluentStack Orientation="Orientation.Horizontal"
+                HorizontalAlignment="@Horizontal"
+                VerticalAlignment="@Vertical"
+                
+                Style="border: 0px dotted var(--accent-fill-rest)">
+                <h5>SendMessage</h5>
+                <FluentSwitch @bind-Value=@IsInputStrOrHex Label="Input String or Hex">
+                    <span slot="unchecked-message">String</span>
+                    <span slot="checked-message">Hex</span>
+                </FluentSwitch>
+            </FluentStack>
             <FluentStack Orientation="Orientation.Horizontal"
                         HorizontalAlignment="@Horizontal"
                         VerticalAlignment="@Vertical"
@@ -72,17 +118,30 @@
 
     private int Count { get; set; } = 100;
     private string selectedBaudrateValue = "115200";
+    private string selectedLogicModule = "0";
     private Timer? _updateTimer = null;
     public string ScaleValue { get; set; } = "0.000";   
     private string? dataForSend, dataHistory; 
+    private bool unabledSelectCompLogicModule = false;
+    private ILogicModule? _logicModule = null;
+    private bool IsDisplayStrOrHex = false;
+    private bool IsInputStrOrHex = false;
+    private FluentTextArea? _refDataHistory;
 
     // for JSInvokable Function
     private DotNetObjectReference<Serial>? objectReference;
-    private static Func<string, Task>? ChangeParaContentActionAsync;
+    private static Func<byte[], Task>? ChangeParaContentActionAsyncBytes;
+    private static Func<string, Task>? ChangeParaContentActionAsyncString;
 
-    private async Task LocalChangeParaContentValueAsync(string value)
+    private async Task LocalChangeParaContentValueAsyncBytes(byte[] value)
     {
-        await CallbackListen(value);
+        await CallbackListen("RX <<", value);
+    }
+
+    private async Task LocalChangeParaContentValueAsyncString(string value)
+    {
+        var result = Encoding.UTF8.GetBytes(value);
+        await CallbackListen("RX <<", result);
     }
 
     #region Lifecycle Method, Interface Method 
@@ -90,7 +149,9 @@
     protected override void OnInitialized()
     {
         base.OnInitialized();
-        ChangeParaContentActionAsync = LocalChangeParaContentValueAsync;
+
+        ChangeParaContentActionAsyncBytes = LocalChangeParaContentValueAsyncBytes;
+        ChangeParaContentActionAsyncString = LocalChangeParaContentValueAsyncString;
     }
 
     protected override async Task OnInitializedAsync()
@@ -117,7 +178,8 @@
 
     public void Dispose()
     {
-        ChangeParaContentActionAsync = null;
+        ChangeParaContentActionAsyncBytes = null;
+        ChangeParaContentActionAsyncString = null;
         _updateTimer?.Dispose();
         objectReference?.Dispose();
 
@@ -173,7 +235,34 @@
     {
         if(!string.IsNullOrEmpty(dataForSend))
         {
-            await SendMessage((string)dataForSend);
+            if(IsInputStrOrHex)
+            {
+                byte[]? data = Enumerable.Range(0, dataForSend.Length)
+                      .Where(x => x % 2 == 0)
+                      .Select(x => Convert.ToByte(dataForSend.Substring(x, 2), 16))
+                      .ToArray();
+
+                if(data != null && data.Length > 0)
+                {
+                    #pragma warning disable 8602
+                    #pragma warning disable 8604
+                    var dataToString = data?.ToString().Replace("-", " ");
+
+                    Console.WriteLine($"DoSend [{dataToString}]");
+                    await SendMessage(data);
+                    #pragma warning restore 8602
+                    #pragma warning restore 8604
+                }
+                else
+                {
+                    await Task.Delay(1);
+                }
+            }
+            else
+            {
+                byte[] data = Encoding.UTF8.GetBytes(dataForSend);
+                await SendMessage(data);
+            }
         }
     }
 
@@ -207,6 +296,89 @@
         await Task.Delay(1);
     }
 
+    public async Task DoHistoryClear()
+    {
+        dataHistory = string.Empty;
+
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoScrollBottom()
+    {
+        _refDataHistory?.FocusAsync();
+
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoStartLogic()
+    {
+        bool IsModuleSelectOk = false;
+
+        if(!unabledSelectCompLogicModule)
+        {
+            int selectValue = -1;
+
+            IsModuleSelectOk = int.TryParse(selectedLogicModule, out selectValue);
+
+            if(IsModuleSelectOk)
+            {
+                switch(selectValue)
+                {
+                    case 0:
+                        _logicModule = new Shared.Logic.Thermometer.ThermometerDummy();
+                        break;
+                    case 1:
+                        _logicModule = new Shared.Logic.Thrust.SteamJet();
+                        break;
+                    default:
+                        Console.WriteLine($"IsModuleSelectOk [{selectValue}] - logicValue ng");
+                        IsModuleSelectOk = false;
+                        break;
+                }
+            }
+        }
+
+        if(IsModuleSelectOk)
+        {
+            if(_logicModule != null)
+            {
+                var result = await _logicModule.Start();
+
+                if(result)
+                {
+                    unabledSelectCompLogicModule = true;
+                }
+            }
+            else
+            {
+                Console.WriteLine($"_logicModule is null");
+            }
+        }
+
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoStopLogic()
+    {
+        if(_logicModule == null)
+        {
+            Console.WriteLine($"생성된 logicModule이 없음");
+
+            await Task.Delay(1);
+        }
+        else
+        {
+            var result = await _logicModule.Stop();
+
+            if(result)
+            {
+                unabledSelectCompLogicModule = false;
+            }
+
+            await InvokeAsync(() => StateHasChanged());
+        }
+    }
+
     #endregion
 
     #region Internal Method
@@ -234,26 +406,70 @@
         return result;
     }
 
-    public async Task SendMessage(string message)
+    public async Task SendMessage(byte[] data)
     {
         //if(SerialP.IsConnected)
         {
-            await SerialP.Write(message);
-            await CallbackListen(message);
+            //byte[] messageToBytes = Encoding.ASCII.GetBytes(message);
+            await SerialP.Write(data);
+            await CallbackListen("TX >>", data);
         }
     }
 
-    public async Task CallbackListen(object data)
+    public string GetTimestamp()
+    {
+        return (DateTime.Now).ToString("HH:mm:ss.fff");
+    }
+
+    public string GetViewData(byte[] data)
+    {
+        if(IsDisplayStrOrHex)
+        {
+            var result = BitConverter.ToString(data).Replace("-", " ");
+            return $"(hex) {result}";
+        }
+        else
+        {
+            return Encoding.UTF8.GetString(data);
+        }
+    }
+
+    public async Task CallbackListen(string prefix, byte[] data)
     {
         try
         {
-            string curruntTimestamp = (DateTime.Now).ToString("HH:mm:ss.fff");
-            dataHistory += $"[{curruntTimestamp}] {data}" + Environment.NewLine;
+            string curruntTimestamp = GetTimestamp();
+
+            string rxStringForDisplay = GetViewData(data);
+            dataHistory += $"[{curruntTimestamp}] {prefix} {rxStringForDisplay}" + Environment.NewLine;
+
+            if(_logicModule != null && _logicModule.IsOn)
+            {
+                var cmd = data.ToString();
+
+                if(cmd != null)
+                {
+                    byte[] dataBytes = await _logicModule.GetResponse(data);
+
+                    if(dataBytes != null && dataBytes.Length > 0)
+                    {
+                        //byte[] dataBytes = Encoding.UTF8.GetBytes(response);
+                        //byte[] dataBytes = Encoding.ASCII.GetBytes(response);
+
+                        string rtStringForDisplay = GetViewData(dataBytes);
+                        dataHistory += $"[{curruntTimestamp}] RT >> {rtStringForDisplay}" + Environment.NewLine;
+
+                        await SerialP.Write(dataBytes);
+                    }
+                }
+            }
         }
         catch(Exception ex)
         {
             Console.WriteLine(ex);
         }
+
+        _refDataHistory?.FocusAsync(false);
 
         await InvokeAsync(() => StateHasChanged());
     }
@@ -271,14 +487,31 @@
     #region JSInvokable Method
 
     [JSInvokable]
-    public static void UpdateMessage(string msg)
+    public static void UpdateMessageBytes(byte[] data)
     {
         try
         {
-            if (ChangeParaContentActionAsync is {} actionAsync)
+            if (ChangeParaContentActionAsyncBytes is {} actionAsync)
             {
-                //await actionAsync(msg);
-                actionAsync(msg);
+                //await actionAsync(data);
+                actionAsync(data);
+            }
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+    }
+
+    [JSInvokable]
+    public static void UpdateMessageString(string data)
+    {
+        try
+        {
+            if (ChangeParaContentActionAsyncString is {} actionAsync)
+            {
+                //await actionAsync(data);
+                actionAsync(data);
             }
         }
         catch(Exception ex)
@@ -312,6 +545,38 @@
             Console.WriteLine($"DoTest02");
             
             await JSRuntime.InvokeVoidAsync("sayHello1");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+       
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoTest03()
+    {
+        try
+        {
+            Console.WriteLine($"DoTest03");
+
+            _refDataHistory?.FocusAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+       
+        await InvokeAsync(() => StateHasChanged());
+    }
+
+    public async Task DoTest04()
+    {
+        try
+        {
+            Console.WriteLine($"DoTest04");
+
+             dataHistory += $"temp" + Environment.NewLine;
         }
         catch (Exception ex)
         {
